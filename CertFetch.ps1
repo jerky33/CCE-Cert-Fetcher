@@ -117,7 +117,6 @@ if (Test-Path -Path $InputServerList){
     }
 }
 
-#Get-SSLCert https://labsprawler-12.lab.local "labsprawler-12.lab.local"
 
 #region ---------------------------------------Start Audit---------------------------------------
 WriteResults "Default" "Starting Audit Checks for list of servers"
@@ -140,14 +139,6 @@ Get-Content $InputServerList | ForEach-Object {
         WriteResults "Pass" "- Server `'$Server`' Online - Continuing with Cert Fetch Tasks" $ShwResMsg
         Get-SSLCert https://$Server "$Server" iis
         Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" dfp
-
-        <#
-        Write-Host $PWD
-        Set-Location $env:CCE_JAVA_HOME\bin
-        Write-Host $PWD
-        Set-Location $PSScriptRoot
-        Write-Host $PWD #>
-
     }
     else {
         WriteResults "Fail" "- Server `'$Server`' Offline - NOT Continuing with Cert Fetch Tasks" $ShwResMsg
