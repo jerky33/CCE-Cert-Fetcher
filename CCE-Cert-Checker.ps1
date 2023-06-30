@@ -5,11 +5,12 @@
 #Note: This Script looks for two files, Servers.txt (Required) and Creds.csv (Optional) in the same folder where the script is.
 #region Initial Setup Vars
 Set-Location -Path $PSScriptRoot
-$InputServerList = ".\Servers.txt"
-$ResultsFolder = "\CertFecth"
+$InputServerList = ".\Servers.csv"
+$ResultsFolder = "\CertFetch"
 $global:ResultsPath = "$PSScriptRoot$($ResultsFolder)"
-$HTMLFile = "CertFetchResult.htm"
-$CsvFile = "CertFetchResult.csv"
+$global:HTMLFile = "CertFetchResult.htm"
+$global:CsvFile = "CertFetchResult.csv"
+$global:TodaysDate = Get-Date
 $ShwResMsg = $true
 $global:HTMLOuputStart = "<html><body><br><b>CCE Cert Fetch Results</b></body><html>
 <html><body>"
@@ -75,6 +76,18 @@ Function Get-SSLCert ($URL, $FQDN, $CertType){
             $chain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
             $chain.build($cert) | Out-Null
             $chain.ChainElements.Certificate | ForEach-Object {set-content -value $($_.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)) -encoding byte -path "$ResultsPath\$FQDN`_$CertType.cer"}
+            $CertDir = "$PWD\CertFetch"
+            $CRT = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 "$CertDir\$FQDN`_$CertType.cer"
+            $DateExpire = $CRT.GetExpirationDateString()
+            $ThirtyDaysOut = $TodaysDate.AddDays(30)
+            $SixtyDaysOut = $TodaysDate.AddDays(60)
+            $ValidDaysRemaining = New-TimeSpan -Start $TodaysDate -End $DateExpire | Select-Object -ExpandProperty Days
+            if ($DateExpire -lt $SixtyDaysOut){
+                WriteResults "Warning" "Certificate expiring within 60 days" $ShwResMsg
+            }
+            elseif ($DateExpire -gt $SixtyDaysOut) {
+                WriteResults "Pass" "Certificate valid for more than 60 days, $ValidDaysRemaining Days remaining" $ShwResMsg
+            }
         }
         else{
             WriteResults "Fail" "- Unable to fetch $CertType cert continuing to next server/cert" $ShwResMsg
@@ -117,15 +130,66 @@ if (Test-Path -Path $InputServerList){
     }
 }
 
+WriteResults "Default" "Starting Audit Checks for list of servers"
+$ServerList = Import-Csv $InputServerList
+Write-Host "Test $ServerList"
+foreach ($ServerObj in $ServerList){
+    #Write-Host $Server.ServerName $Server.ServerType
+    $global:Server = $ServerObj.ServerName
+    if (Test-Connection -Count 2 -Quiet $Server){
+        WriteResults "Pass" "- Server `'$Server`' Online - Continuing with Cert Fetch Tasks" $ShwResMsg
+        if ($ServerObj.ServerType -eq "cce"){
+            Write-Host $Server is a CCE server
+            Get-SSLCert https://$Server "$Server" iis
+            Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" dfp
+        }
+        elseif ($ServerObj.ServerType -eq "cvp"){
+            Write-Host $Server is a CVP server
+            Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" cvp
+        }
+        <#
+        $CertDir = $PWD\CertFetch
+        $CRT = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 "$CertDir\$Server_iis.cer"
+        $DateExpire = $CRT.GetExpirationDateString()
+        $DateEffective = $CRT.GetEffectiveDateString()
+    
+        Write-Host "Expiration Date: $DateExpire"
+    
+        Write-Host "Effective Date: $DateEffective"
+    
+        $TodaysDate = Get-Date
+    
+        $ThirtyDaysOut = $TodaysDate.AddDays(30)
+        $SixtyDaysOut = $TodaysDate.AddDays(60)
+        $ValidDaysRemaining = New-TimeSpan -Start $TodaysDate -End $DateExpire | Select-Object -ExpandProperty Days
+    
+        Write-Host "Todays Date: $TodaysDate"
+        Write-Host "Sixty days out: $SixtyDaysOut"
+        Write-Host "thirty days out: $ThirtyDaysOut"
+        Write-Host "vaid days remaining: $ValidDaysRemaining"
+    
+        if ($DateExpire -lt $SixtyDaysOut){
+            write-host "Certificate expiring within 60 days"
+        }
+        elseif ($DateExpire -gt $SixtyDaysOut) {
+            write-host "Certificate not expiring within 60 days, $ValidDaysRemaining Days remaining"
+        }
+        #>
+    }
+    else {
+        WriteResults "Fail" "- Server `'$Server`' Offline - NOT Continuing with Cert Fetch Tasks" $ShwResMsg
+    }
+}
 
-#region ---------------------------------------Start Audit---------------------------------------
+<#
+#region ---------------------------------------Start Cert Fetch---------------------------------------
 WriteResults "Default" "Starting Audit Checks for list of servers"
 Get-Content $InputServerList | ForEach-Object {
     #region Audit Setup vars and Check for Server
     #Setup Audit Vars
     $global:Server = $_
-    $HTMLFile = "$Server.htm"
-    $CsvFile = "$Server.csv"
+    #$HTMLFile = "$Server.htm"
+    #$CsvFile = "$Server.csv"
     Set-Content -Path "$ResultsPath\$HTMLFile" $HTMLOuputStart
     Set-Content -Path "$ResultsPath\$CsvFile" $null
 
@@ -143,6 +207,35 @@ Get-Content $InputServerList | ForEach-Object {
     else {
         WriteResults "Fail" "- Server `'$Server`' Offline - NOT Continuing with Cert Fetch Tasks" $ShwResMsg
     }
+    $CertDir = $PWD
+
+    $CRT = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 "$CertDir\CertFetch\$Server_iis.cer"
+
+    $DateExpire = $CRT.GetExpirationDateString()
+    $DateEffective = $CRT.GetEffectiveDateString()
+
+    Write-Host "Expiration Date: $DateExpire"
+
+    Write-Host "Effective Date: $DateEffective"
+
+    $TodaysDate = Get-Date
+
+    $ThirtyDaysOut = $TodaysDate.AddDays(30)
+    $SixtyDaysOut = $TodaysDate.AddDays(60)
+    $ValidDaysRemaining = New-TimeSpan -Start $TodaysDate -End $DateExpire | Select-Object -ExpandProperty Days
+
+    Write-Host "Todays Date: $TodaysDate"
+    Write-Host "Sixty days out: $SixtyDaysOut"
+    Write-Host "thirty days out: $ThirtyDaysOut"
+    Write-Host "vaid days remaining: $ValidDaysRemaining"
+
+    if ($DateExpire -lt $SixtyDaysOut){
+        write-host "Certificate expiring within 60 days"
+    }
+    elseif ($DateExpire -gt $SixtyDaysOut) {
+        write-host "Certificate not expiring within 60 days, $ValidDaysRemaining Days remaining"
+    }
 }
+#>
 
 CloseScript
