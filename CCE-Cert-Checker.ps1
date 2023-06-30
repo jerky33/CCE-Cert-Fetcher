@@ -1,8 +1,9 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
 
-
-#Note: This Script looks for two files, Servers.txt (Required) and Creds.csv (Optional) in the same folder where the script is.
+#This script can be used to fetch all the certificates from CCE Servers and will also report if the certificates are expired or going to
+#expire within the next 60 days.
+#Note: This Script looks for a file name Servers.cvp (Required) in the same folder where the script is.
 #region Initial Setup Vars
 Set-Location -Path $PSScriptRoot
 $InputServerList = ".\Servers.csv"
@@ -59,6 +60,12 @@ Function CloseHtml {
 }
 
 Function Get-SSLCert ($URL, $FQDN, $CertType){
+    <#$webRequest = [Net.WebRequest]::Create("https://www.outlook.com")
+    try { $webRequest.GetResponse() } catch {}
+    $cert = $webRequest.ServicePoint.Certificate
+    $bytes = $cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+    set-content -value $bytes -encod byte -path "$pwd\Outlook.Com.cer"ing
+    #>
     $webRequest = [Net.WebRequest]::Create($URL)
     Try {$webResponse = $webRequest.GetResponse()
         if ($webResponse){
@@ -71,9 +78,13 @@ Function Get-SSLCert ($URL, $FQDN, $CertType){
     Try {$cert = $webRequest.ServicePoint.Certificate
         if ($cert){
             WriteResults "Pass" "- $CertType Cert found continuing with cert export" $ShwResMsg
+            $bytes = $cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+            set-content -value $bytes -encod byte -path "$ResultsPath\$FQDN`_$CertType.cer"
+            <#
             $chain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
             $chain.build($cert) | Out-Null
             $chain.ChainElements.Certificate | ForEach-Object {set-content -value $($_.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)) -encoding byte -path "$ResultsPath\$FQDN`_$CertType.cer"}
+            #>
             $CertDir = "$PWD\CertFetch"
             $CRT = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 "$CertDir\$FQDN`_$CertType.cer"
             $DateExpire = $CRT.GetExpirationDateString()
@@ -82,17 +93,21 @@ Function Get-SSLCert ($URL, $FQDN, $CertType){
             $ValidDaysRemaining = New-TimeSpan -Start $TodaysDate -End $DateExpire | Select-Object -ExpandProperty Days
             if ($DateExpire -lt $SixtyDaysOut){
                 WriteResults "Warning" "- - Certificate expiring within 60 days" $ShwResMsg
+                WriteResults "Default" " "
             }
             elseif ($DateExpire -gt $SixtyDaysOut) {
                 WriteResults "Pass" "- - Certificate valid for more than 60 days, $ValidDaysRemaining Days remaining" $ShwResMsg
+                WriteResults "Default" " "
             }
         }
         else{
             WriteResults "Fail" "- Unable to fetch $CertType cert continuing to next server/cert" $ShwResMsg
+            WriteResults "Default" " "
         }
     }
     Catch{
         WriteResults "Fail" "- Unable to fetch $CertType cert continuing to next server/cert" $ShwResMsg
+        WriteResults "Default" " "
     }
 }
 
@@ -135,6 +150,7 @@ Write-Host "Test $ServerList"
 foreach ($ServerObj in $ServerList){
     #Write-Host $Server.ServerName $Server.ServerType
     $global:Server = $ServerObj.ServerName
+    $global:UrlSuffix = $ServerObj.ThirdPartyUrlSuffix
     if (Test-Connection -Count 2 -Quiet $Server){
         WriteResults "Pass" "- Server `'$Server`' Online - Continuing with Cert Fetch Tasks" $ShwResMsg
         if ($ServerObj.ServerType -eq "cce"){
@@ -154,6 +170,10 @@ foreach ($ServerObj in $ServerList){
         elseif ($ServerObj.ServerType -eq "vvb"){
             WriteResults "Default" "$Server is a CVP server" $ShwResMsg
             Get-SSLCert "https://$Server/appadmin/main" "$Server" vvb
+        }
+        elseif ($ServerObj.ServerType -eq "3rdParty"){
+            WriteResults "Default" "$Server is a 3rd Party server" $ShwResMsg
+            Get-SSLCert "https://$Server$UrlSuffix" "$Server" 3rdParty
         }
     }
     else {
