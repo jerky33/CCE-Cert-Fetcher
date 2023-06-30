@@ -72,7 +72,7 @@ Function Get-SSLCert ($URL, $FQDN, $CertType){
     }
     Try {$cert = $webRequest.ServicePoint.Certificate
         if ($cert){
-            WriteResults "Pass" "- $CertType Cert found continuing swith cert export" $ShwResMsg
+            WriteResults "Pass" "- $CertType Cert found continuing with cert export" $ShwResMsg
             $chain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
             $chain.build($cert) | Out-Null
             $chain.ChainElements.Certificate | ForEach-Object {set-content -value $($_.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)) -encoding byte -path "$ResultsPath\$FQDN`_$CertType.cer"}
@@ -83,10 +83,10 @@ Function Get-SSLCert ($URL, $FQDN, $CertType){
             $SixtyDaysOut = $TodaysDate.AddDays(60)
             $ValidDaysRemaining = New-TimeSpan -Start $TodaysDate -End $DateExpire | Select-Object -ExpandProperty Days
             if ($DateExpire -lt $SixtyDaysOut){
-                WriteResults "Warning" "Certificate expiring within 60 days" $ShwResMsg
+                WriteResults "Warning" "- - Certificate expiring within 60 days" $ShwResMsg
             }
             elseif ($DateExpire -gt $SixtyDaysOut) {
-                WriteResults "Pass" "Certificate valid for more than 60 days, $ValidDaysRemaining Days remaining" $ShwResMsg
+                WriteResults "Pass" "- - Certificate valid for more than 60 days, $ValidDaysRemaining Days remaining" $ShwResMsg
             }
         }
         else{
