@@ -17,8 +17,6 @@ $global:HTMLOuputStart = "<html><body><br><b>CCE Cert Fetch Results</b></body><h
 $global:HTMLOuputEnd = "</body></html>"
 
 
-
-
 #Write results to CSV, html file and PowerShell window
 #To use function, send it the message status (Pass, Fail, Warning or Default) then the string to write to audit result to files
 #and lastly the variable $ShwResMsg if you want the message status to be displayed at the end of the message line
@@ -68,7 +66,7 @@ Function Get-SSLCert ($URL, $FQDN, $CertType){
         }
     }
     Catch{
-        WriteResults "Fail" "- $CertType Web request failed to open page, but attempting to read cert" $ShwResMsg
+        WriteResults "Warning" "- $CertType Web request failed to open page, but attempting to read cert" $ShwResMsg
     }
     Try {$cert = $webRequest.ServicePoint.Certificate
         if ($cert){
@@ -130,6 +128,7 @@ if (Test-Path -Path $InputServerList){
     }
 }
 
+#region ---------------------------------------Start Cert Fetch---------------------------------------
 WriteResults "Default" "Starting Audit Checks for list of servers"
 $ServerList = Import-Csv $InputServerList
 Write-Host "Test $ServerList"
@@ -139,103 +138,27 @@ foreach ($ServerObj in $ServerList){
     if (Test-Connection -Count 2 -Quiet $Server){
         WriteResults "Pass" "- Server `'$Server`' Online - Continuing with Cert Fetch Tasks" $ShwResMsg
         if ($ServerObj.ServerType -eq "cce"){
-            Write-Host $Server is a CCE server
-            Get-SSLCert https://$Server "$Server" iis
-            Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" dfp
+            WriteResults "Default" "$Server is a CCE server" $ShwResMsg
+            Get-SSLCert https://$Server "$Server" cceiis
+            Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" ccedfp
         }
         elseif ($ServerObj.ServerType -eq "cvp"){
-            Write-Host $Server is a CVP server
-            Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" cvp
+            WriteResults "Default" "$Server is a CVP server" $ShwResMsg
+            Get-SSLCert "https://$Server`:8111" "$Server" cvpwsm
         }
-        <#
-        $CertDir = $PWD\CertFetch
-        $CRT = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 "$CertDir\$Server_iis.cer"
-        $DateExpire = $CRT.GetExpirationDateString()
-        $DateEffective = $CRT.GetEffectiveDateString()
-    
-        Write-Host "Expiration Date: $DateExpire"
-    
-        Write-Host "Effective Date: $DateEffective"
-    
-        $TodaysDate = Get-Date
-    
-        $ThirtyDaysOut = $TodaysDate.AddDays(30)
-        $SixtyDaysOut = $TodaysDate.AddDays(60)
-        $ValidDaysRemaining = New-TimeSpan -Start $TodaysDate -End $DateExpire | Select-Object -ExpandProperty Days
-    
-        Write-Host "Todays Date: $TodaysDate"
-        Write-Host "Sixty days out: $SixtyDaysOut"
-        Write-Host "thirty days out: $ThirtyDaysOut"
-        Write-Host "vaid days remaining: $ValidDaysRemaining"
-    
-        if ($DateExpire -lt $SixtyDaysOut){
-            write-host "Certificate expiring within 60 days"
+        elseif ($ServerObj.ServerType -eq "cvpops"){
+            WriteResults "Default" "$Server is a CVP Ops server" $ShwResMsg
+            Get-SSLCert "https://$Server`:8111" "$Server" cvpwsm
+            Get-SSLCert "https://$Server`:9443" "$Server" cvpoamp
         }
-        elseif ($DateExpire -gt $SixtyDaysOut) {
-            write-host "Certificate not expiring within 60 days, $ValidDaysRemaining Days remaining"
+        elseif ($ServerObj.ServerType -eq "vvb"){
+            WriteResults "Default" "$Server is a CVP server" $ShwResMsg
+            Get-SSLCert "https://$Server/appadmin/main" "$Server" vvb
         }
-        #>
     }
     else {
         WriteResults "Fail" "- Server `'$Server`' Offline - NOT Continuing with Cert Fetch Tasks" $ShwResMsg
     }
 }
-
-<#
-#region ---------------------------------------Start Cert Fetch---------------------------------------
-WriteResults "Default" "Starting Audit Checks for list of servers"
-Get-Content $InputServerList | ForEach-Object {
-    #region Audit Setup vars and Check for Server
-    #Setup Audit Vars
-    $global:Server = $_
-    #$HTMLFile = "$Server.htm"
-    #$CsvFile = "$Server.csv"
-    Set-Content -Path "$ResultsPath\$HTMLFile" $HTMLOuputStart
-    Set-Content -Path "$ResultsPath\$CsvFile" $null
-
-    #Write Server name to results
-    WriteResults "Default" "Server - `'$Server`'"
-
-    #Check that the server is reachable
-    WriteResults "Default" "Checking to see if `'$Server`' is online"
-
-    if (Test-Connection -Count 2 -Quiet $Server){
-        WriteResults "Pass" "- Server `'$Server`' Online - Continuing with Cert Fetch Tasks" $ShwResMsg
-        Get-SSLCert https://$Server "$Server" iis
-        Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" dfp
-    }
-    else {
-        WriteResults "Fail" "- Server `'$Server`' Offline - NOT Continuing with Cert Fetch Tasks" $ShwResMsg
-    }
-    $CertDir = $PWD
-
-    $CRT = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 "$CertDir\CertFetch\$Server_iis.cer"
-
-    $DateExpire = $CRT.GetExpirationDateString()
-    $DateEffective = $CRT.GetEffectiveDateString()
-
-    Write-Host "Expiration Date: $DateExpire"
-
-    Write-Host "Effective Date: $DateEffective"
-
-    $TodaysDate = Get-Date
-
-    $ThirtyDaysOut = $TodaysDate.AddDays(30)
-    $SixtyDaysOut = $TodaysDate.AddDays(60)
-    $ValidDaysRemaining = New-TimeSpan -Start $TodaysDate -End $DateExpire | Select-Object -ExpandProperty Days
-
-    Write-Host "Todays Date: $TodaysDate"
-    Write-Host "Sixty days out: $SixtyDaysOut"
-    Write-Host "thirty days out: $ThirtyDaysOut"
-    Write-Host "vaid days remaining: $ValidDaysRemaining"
-
-    if ($DateExpire -lt $SixtyDaysOut){
-        write-host "Certificate expiring within 60 days"
-    }
-    elseif ($DateExpire -gt $SixtyDaysOut) {
-        write-host "Certificate not expiring within 60 days, $ValidDaysRemaining Days remaining"
-    }
-}
-#>
 
 CloseScript
