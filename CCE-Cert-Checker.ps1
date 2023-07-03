@@ -80,11 +80,6 @@ Function Get-SSLCert ($URL, $FQDN, $CertType){
             WriteResults "Pass" "- $CertType Cert found continuing with cert export" $ShwResMsg
             $bytes = $cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)
             set-content -value $bytes -encod byte -path "$ResultsPath\$FQDN`_$CertType.cer"
-            <#
-            $chain = New-Object -TypeName System.Security.Cryptography.X509Certificates.X509Chain
-            $chain.build($cert) | Out-Null
-            $chain.ChainElements.Certificate | ForEach-Object {set-content -value $($_.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)) -encoding byte -path "$ResultsPath\$FQDN`_$CertType.cer"}
-            #>
             $CertDir = "$PWD\CertFetch"
             $CRT = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 "$CertDir\$FQDN`_$CertType.cer"
             $DateExpire = $CRT.GetExpirationDateString()
@@ -146,7 +141,6 @@ if (Test-Path -Path $InputServerList){
 #region ---------------------------------------Start Cert Fetch---------------------------------------
 WriteResults "Default" "Starting Audit Checks for list of servers"
 $ServerList = Import-Csv $InputServerList
-Write-Host "Test $ServerList"
 foreach ($ServerObj in $ServerList){
     #Write-Host $Server.ServerName $Server.ServerType
     $global:Server = $ServerObj.ServerName
@@ -155,8 +149,8 @@ foreach ($ServerObj in $ServerList){
         WriteResults "Pass" "- Server `'$Server`' Online - Continuing with Cert Fetch Tasks" $ShwResMsg
         if ($ServerObj.ServerType -eq "cce"){
             WriteResults "Default" "$Server is a CCE server" $ShwResMsg
-            Get-SSLCert https://$Server "$Server" cceiis
-            Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" ccedfp
+            Get-SSLCert https://$Server "$Server" cce-iis
+            Get-SSLCert "https://$Server`:7890/icm-dp/DiagnosticPortal" "$Server" cce-dfp
         }
         elseif ($ServerObj.ServerType -eq "cvp"){
             WriteResults "Default" "$Server is a CVP server" $ShwResMsg
@@ -164,8 +158,8 @@ foreach ($ServerObj in $ServerList){
         }
         elseif ($ServerObj.ServerType -eq "cvpops"){
             WriteResults "Default" "$Server is a CVP Ops server" $ShwResMsg
-            Get-SSLCert "https://$Server`:8111" "$Server" cvpwsm
-            Get-SSLCert "https://$Server`:9443" "$Server" cvpoamp
+            Get-SSLCert "https://$Server`:8111" "$Server" cvp-wsm
+            Get-SSLCert "https://$Server`:9443" "$Server" cvp-oamp
         }
         elseif ($ServerObj.ServerType -eq "vvb"){
             WriteResults "Default" "$Server is a CVP server" $ShwResMsg
